@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caesar Cipher — DecodeLabs</title>
+<style>
+  :root{
+    --bg:#0a1220;
+    --panel:#111b2e;
+    --line:#1e2c47;
+    --blue:#4c8dff;
+    --blue-soft:#274a7a;
+    --orange:#ff7a45;
+    --orange-soft:#7a4527;
+    --green:#3ddc97;
+    --green-soft:#1f6b4d;
+    --text:#e7ecf3;
+    --muted:#7e8ba3;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(ellipse 60% 40% at 50% -10%, rgba(76,141,255,0.12), transparent), var(--bg);
+    background-attachment:fixed;
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  .grid-overlay{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:linear-gradient(rgba(76,141,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(76,141,255,0.05) 1px, transparent 1px);
+    background-size:28px 28px;
+    mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 70%);
+  }
+  .wrap{ position:relative; z-index:1; max-width:520px; margin:0 auto; padding:28px 20px 60px; }
+  header{ text-align:center; margin-bottom:22px; }
+  .eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:0.18em; color:var(--blue); text-transform:uppercase; margin-bottom:10px; }
+  h1{ font-size:28px; font-weight:700; margin:0 0 6px; letter-spacing:-0.02em; }
+  .sub{ color:var(--muted); font-size:13.5px; line-height:1.5; margin:0; }
+
+  .ring-stage{ display:flex; justify-content:center; align-items:center; margin:22px 0; height:150px; }
+  .ring{
+    position:relative; width:150px; height:150px; border-radius:50%;
+    border:1px solid var(--line);
+    background:radial-gradient(circle at 50% 40%, #16223a, #0d1526 75%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 1px rgba(76,141,255,0.05), 0 20px 40px -20px rgba(0,0,0,0.6);
+  }
+  .ring::before{
+    content:''; position:absolute; inset:14px; border-radius:50%;
+    border:1px dashed rgba(76,141,255,0.25);
+    transition:transform 0.5s cubic-bezier(.22,1,.36,1), border-color 0.3s;
+    transform:rotate(calc(var(--shift, 0) * 13.85deg));
+  }
+  .ring.mode-decrypt::before{ border-color:rgba(255,122,69,0.3); }
+  .ring.mode-plain::before{ border-color:rgba(61,220,151,0.35); }
+  .ring-center{ text-align:center; z-index:2; }
+  .ring-pair{ font-family:var(--mono); font-size:22px; font-weight:600; }
+  .ring-pair .a{ color:var(--muted); }
+  .ring-pair .arrow{ margin:0 4px; font-size:14px; }
+  .ring.mode-encrypt .arrow, .ring.mode-encrypt .b{ color:var(--blue); }
+  .ring.mode-decrypt .arrow, .ring.mode-decrypt .b{ color:var(--orange); }
+  .ring.mode-plain .arrow, .ring.mode-plain .b{ color:var(--green); }
+  .ring-label{ font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:4px; letter-spacing:0.08em; }
+
+  .segmented{ display:flex; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:4px; margin-bottom:16px; }
+  .segmented button{
+    flex:1; background:transparent; border:none; color:var(--muted);
+    font-family:inherit; font-weight:600; font-size:14px; padding:10px 0;
+    border-radius:9px; cursor:pointer; transition:all 0.2s;
+  }
+  .segmented button.active.encrypt{ background:var(--blue); color:#06101f; }
+  .segmented button.active.decrypt{ background:var(--orange); color:#1a0d05; }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; }
+  label{ display:block; font-size:12px; color:var(--muted); margin-bottom:8px; font-family:var(--mono); letter-spacing:0.04em; }
+
+  .shift-row{ display:flex; align-items:center; gap:14px; }
+  .shift-value{
+    font-family:var(--mono); font-size:20px; font-weight:700; min-width:44px; text-align:center;
+    background:#0c1526; border:1px solid var(--blue-soft); border-radius:8px; padding:6px 0; color:var(--blue);
+  }
+  input[type=range]{ flex:1; -webkit-appearance:none; height:4px; border-radius:2px; background:var(--line); outline:none; }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+    background:var(--blue); border:3px solid #0c1526; box-shadow:0 0 0 1px var(--blue);
+  }
+
+  textarea{
+    width:100%; min-height:90px; resize:vertical;
+    background:#0c1526; border:1px solid var(--line); border-radius:10px;
+    color:var(--text); font-size:15px; padding:12px; font-family:inherit; outline:none;
+  }
+  textarea:focus{ border-color:var(--blue); }
+  .mode-decrypt-active textarea:focus{ border-color:var(--orange); }
+
+  button.action{
+    width:100%; padding:14px; border-radius:10px; border:none;
+    font-size:14.5px; font-weight:700; cursor:pointer; font-family:inherit;
+    margin-top:14px; transition:transform 0.15s; letter-spacing:0.02em;
+  }
+  button.action:active{ transform:scale(0.98); }
+  .action.encrypt-btn{ background:var(--blue); color:#06101f; }
+  .action.decrypt-btn{ background:var(--orange); color:#1a0d05; }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; margin-top:14px; }
+  .toggle-label{ font-size:12.5px; color:var(--muted); font-family:var(--mono); }
+  .switch{ position:relative; width:40px; height:22px; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .slider-toggle{
+    position:absolute; cursor:pointer; inset:0; background:var(--line); border-radius:22px; transition:0.2s;
+  }
+  .slider-toggle::before{
+    content:''; position:absolute; height:16px; width:16px; left:3px; top:3px;
+    background:var(--muted); border-radius:50%; transition:0.2s;
+  }
+  .switch input:checked + .slider-toggle{ background:var(--orange-soft); }
+  .switch input:checked + .slider-toggle::before{ transform:translateX(18px); background:var(--orange); }
+
+  .manual-shift{ display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .manual-shift.show{ display:block; }
+
+  .detect-banner{
+    display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px;
+    font-family:var(--mono); font-size:12px; margin-top:14px; border:1px solid var(--line);
+  }
+  .detect-banner.shifted{ background:rgba(255,122,69,0.08); border-color:var(--orange-soft); color:var(--orange); }
+  .detect-banner.plain{ background:rgba(61,220,151,0.08); border-color:var(--green-soft); color:var(--green); }
+  .detect-banner .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
+
+  .output-block{ margin-top:16px; }
+  .output-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .tag{ font-family:var(--mono); font-size:10px; letter-spacing:0.05em; padding:2px 8px; border-radius:20px; }
+  .tag.encrypt{ color:var(--blue); border:1px solid var(--blue-soft); background:rgba(76,141,255,0.08); }
+  .tag.decrypt{ color:var(--orange); border:1px solid var(--orange-soft); background:rgba(255,122,69,0.08); }
+  .copy-btn{
+    padding:5px 10px; font-size:11px; border-radius:8px; background:#0c1526;
+    border:1px solid var(--line); color:var(--muted); cursor:pointer; font-family:inherit;
+  }
+  .copy-btn.copied{ color:var(--blue); border-color:var(--blue-soft); }
+  .output-text{
+    font-family:var(--mono); font-size:14.5px; line-height:1.6; color:var(--text);
+    word-break:break-word; white-space:pre-wrap; background:#0c1526;
+    border:1px solid var(--line); border-radius:10px; padding:12px; min-height:24px;
+  }
+  .output-text.empty{ color:var(--muted); font-family:inherit; font-size:13px; }
+
+  .hint-link{
+    display:inline-block; margin-top:10px; font-family:var(--mono); font-size:11.5px;
+    color:var(--muted); text-decoration:none; border-bottom:1px dashed var(--line); cursor:pointer; padding-bottom:1px;
+  }
+  .hint-link:hover{ color:var(--blue); border-color:var(--blue-soft); }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  footer{ text-align:center; margin-top:26px; }
+  footer p{ font-family:var(--mono); font-size:10.5px; color:var(--muted); letter-spacing:0.05em; }
+</style>
+</head>
+<body>
+<div class="grid-overlay"></div>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">DecodeLabs · Project 2</div>
+    <h1>Caesar Cipher</h1>
+    <p class="sub">Encrypt a message, or drop in any text — the detector figures out if it's already ciphertext.</p>
+  </header>
+
+  <div class="ring-stage">
+    <div class="ring mode-encrypt" id="ring">
+      <div class="ring-center">
+        <div class="ring-pair"><span class="a" id="ringA">A</span><span class="arrow">→</span><span class="b" id="ringB">D</span></div>
+        <div class="ring-label" id="ringLabel">ENCRYPT · SHIFT +<span id="ringShift">3</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="segmented">
+    <button class="active encrypt" id="tabEncrypt" onclick="setMode('encrypt')">Encrypt</button>
+    <button class="decrypt" id="tabDecrypt" onclick="setMode('decrypt')">Decrypt</button>
+  </div>
+
+  <!-- ENCRYPT VIEW -->
+  <div class="view active" id="viewEncrypt">
+    <div class="panel">
+      <label>SHIFT KEY</label>
+      <div class="shift-row">
+        <input type="range" id="shiftSlider" min="1" max="25" value="3">
+        <div class="shift-value" id="shiftValue">3</div>
+      </div>
+
+      <label style="margin-top:16px;" for="plaintext">PLAINTEXT INPUT</label>
+      <textarea id="plaintext" placeholder="Type the message you want to protect…">Attack at dawn</textarea>
+      <button class="action encrypt-btn" onclick="doEncrypt()">Encrypt Message</button>
+
+      <div class="output-block">
+        <div class="output-head">
+          <span class="tag encrypt">CIPHERTEXT OUTPUT</span>
+          <button class="copy-btn" onclick="copyText('cipherOut', this)">Copy</button>
+        </div>
+        <div class="output-text empty" id="cipherOut">Run Encrypt to see output</div>
+        <a class="hint-link" onclick="sendToDecrypt()">→ Send this to Decrypt</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECRYPT VIEW -->
+  <div class="view" id="viewDecrypt">
+    <div class="panel">
+      <label for="ciphertext">PASTE ANY TEXT</label>
+      <textarea id="ciphertext" placeholder="Paste text here — encrypted or not, we'll check first…"></textarea>
+      <button class="action decrypt-btn" onclick="doDecrypt()">Detect &amp; Decrypt</button>
+
+      <div class="toggle-row">
+        <span class="toggle-label">MANUAL SHIFT OVERRIDE</span>
+        <label class="switch">
+          <input type="checkbox" id="manualToggle" onchange="toggleManual()">
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+      <div class="manual-shift" id="manualShiftBox">
+        <label>FORCE SHIFT KEY</label>
+        <div class="shift-row">
+          <input type="range" id="manualSlider" min="1" max="25" value="3">
+          <div class="shift-value" id="manualValue" style="color:var(--orange); border-color:var(--orange-soft);">3</div>
+        </div>
+      </div>
+
+      <div class="output-block">
+        <div id="detectBanner"></div>
+        <div class="output-head" style="margin-top:12px;">
+          <span class="tag decrypt">RESULT</span>
+          <button class="copy-btn" onclick="copyText('decryptOut', this)">Copy</button>
+        </div>
+        <div class="output-text empty" id="decryptOut">Run Detect &amp; Decrypt to see output</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Detection scores all 25 shifts against English letter frequency — lowest deviation wins.</p>
+  </footer>
+</div>
+
+<script>
+let currentMode = 'encrypt';
+
+function caesarShift(text, shift, encrypt){
+  const s = encrypt ? shift : -shift;
+  let out = '';
+  for (const ch of text){
+    const code = ch.charCodeAt(0);
+    if (code >= 65 && code <= 90) out += String.fromCharCode((code - 65 + s + 260) % 26 + 65);
+    else if (code >= 97 && code <= 122) out += String.fromCharCode((code - 97 + s + 260) % 26 + 97);
+    else out += ch;
+  }
+  return out;
+}
+
+// Standard English letter frequency (%) -- used for chi-squared scoring
+const ENGLISH_FREQ = {A:8.2,B:1.5,C:2.8,D:4.3,E:12.7,F:2.2,G:2.0,H:6.1,I:7.0,J:0.15,K:0.77,
+  L:4.0,M:2.4,N:6.7,O:7.5,P:1.9,Q:0.095,R:6.0,S:6.3,T:9.1,U:2.8,V:0.98,W:2.4,X:0.15,Y:2.0,Z:0.074};
+
+const COMMON_WORDS = ['the','and','to','of','in','is','that','it','you','was','for','on','are',
+  'as','with','his','they','at','be','this','from','have','or','one','had','by','word','but',
+  'not','what','all','were','we','when','your','can','said','there','use','each','which','she',
+  'how','their','will','other','about','out','many','then','them','these','so','some','her',
+  'would','make','like','him','into','time','has','look','more','write','go','see','number',
+  'no','way','could','people','my','than','first','water','been','call','who','oil','its','now',
+  'find','long','down','day','did','get','come','made','may','part','test','help','project',
+  'please','thanks','hello','hey','yes','name','student','learning','building','using','system',
+  'security','data','message','also','just','only','very','good','work','need','want','know'];
+
+function scoreEnglish(text){
+  const letters = text.toUpperCase().replace(/[^A-Z]/g, '');
+  if (letters.length === 0) return { chi2: 999999, wordHits: 0, wordFraction: 0 };
+
+  const counts = {};
+  for (const ch of letters) counts[ch] = (counts[ch] || 0) + 1;
+
+  let chi2 = 0;
+  for (const letter in ENGLISH_FREQ){
+    const observed = counts[letter] || 0;
+    const expected = (ENGLISH_FREQ[letter] / 100) * letters.length;
+    if (expected > 0) chi2 += Math.pow(observed - expected, 2) / expected;
+  }
+
+  const words = text.toLowerCase().match(/[a-z]+/g) || [];
+  let wordHits = 0;
+  for (const w of words) if (COMMON_WORDS.includes(w)) wordHits++;
+  const wordFraction = words.length > 0 ? wordHits / words.length : 0;
+
+  return { chi2, wordHits, wordFraction };
+}
+
+// Tries all 25 shifts, returns the most English-like decryption
+function detectAndDecrypt(text){
+  let best = { shift: 0, score: Infinity, decoded: text };
+
+  for (let shift = 0; shift < 26; shift++){
+    const decoded = caesarShift(text, shift, false);
+    const { chi2, wordHits, wordFraction } = scoreEnglish(decoded);
+    // heavily reward recognizable words -- the strongest signal on short text,
+    // where letter-frequency alone (chi2) is too noisy to trust on its own
+    const score = chi2 - (wordHits * 80) - (wordFraction * 100);
+    if (score < best.score){
+      best = { shift, score, decoded };
+    }
+  }
+  return best; // shift === 0 means "already plaintext, no change needed"
+}
+
+function updateRing(shift, forceMode){
+  const ring = document.getElementById('ring');
+  const label = document.getElementById('ringLabel');
+  const mode = forceMode || currentMode;
+  document.getElementById('ringShift').textContent = shift;
+  ring.style.setProperty('--shift', shift);
+  ring.classList.remove('mode-encrypt', 'mode-decrypt', 'mode-plain');
+
+  if (mode === 'encrypt'){
+    ring.classList.add('mode-encrypt');
+    document.getElementById('ringA').textContent = 'A';
+    document.getElementById('ringB').textContent = String.fromCharCode(65 + shift);
+    label.innerHTML = 'ENCRYPT · SHIFT +' + shift;
+  } else if (mode === 'plain'){
+    ring.classList.add('mode-plain');
+    document.getElementById('ringA').textContent = 'A';
+    document.getElementById('ringB').textContent = 'A';
+    label.innerHTML = 'ALREADY PLAINTEXT · NO SHIFT';
+  } else {
+    ring.classList.add('mode-decrypt');
+    document.getElementById('ringA').textContent = String.fromCharCode(65 + shift);
+    document.getElementById('ringB').textContent = 'A';
+    label.innerHTML = 'DECRYPT · SHIFT −' + shift;
+  }
+}
+
+function setMode(mode){
+  currentMode = mode;
+  document.getElementById('tabEncrypt').classList.toggle('active', mode === 'encrypt');
+  document.getElementById('tabDecrypt').classList.toggle('active', mode === 'decrypt');
+  document.getElementById('viewEncrypt').classList.toggle('active', mode === 'encrypt');
+  document.getElementById('viewDecrypt').classList.toggle('active', mode === 'decrypt');
+  const shift = mode === 'encrypt'
+    ? parseInt(document.getElementById('shiftSlider').value, 10)
+    : parseInt(document.getElementById('manualSlider').value, 10);
+  updateRing(shift, mode);
+}
+
+function toggleManual(){
+  const on = document.getElementById('manualToggle').checked;
+  document.getElementById('manualShiftBox').classList.toggle('show', on);
+}
+
+function doEncrypt(){
+  const text = document.getElementById('plaintext').value;
+  const shift = parseInt(document.getElementById('shiftSlider').value, 10);
+  const out = document.getElementById('cipherOut');
+  if (!text){ out.textContent = 'Enter some text first'; out.classList.add('empty'); return; }
+  out.textContent = caesarShift(text, shift, true);
+  out.classList.remove('empty');
+  updateRing(shift, 'encrypt');
+}
+
+function doDecrypt(){
+  const text = document.getElementById('ciphertext').value;
+  const out = document.getElementById('decryptOut');
+  const banner = document.getElementById('detectBanner');
+  const manualOn = document.getElementById('manualToggle').checked;
+
+  if (!text){
+    out.textContent = 'Enter some text first';
+    out.classList.add('empty');
+    banner.innerHTML = '';
+    return;
+  }
+
+  if (manualOn){
+    const shift = parseInt(document.getElementById('manualSlider').value, 10);
+    out.textContent = caesarShift(text, shift, false);
+    out.classList.remove('empty');
+    banner.innerHTML = '<div class="detect-banner shifted"><span class="dot"></span>Manual override — forced shift −' + shift + '</div>';
+    updateRing(shift, 'decrypt');
+    return;
+  }
+
+  const result = detectAndDecrypt(text);
+  const letterCount = (text.match(/[a-zA-Z]/g) || []).length;
+  const shortWarning = letterCount < 20
+    ? '<div class="detect-banner shifted" style="margin-top:8px;"><span class="dot"></span>Short text (' + letterCount + ' letters) — detection is less reliable below ~20 letters. Consider manual override.</div>'
+    : '';
+
+  if (result.shift === 0){
+    out.textContent = text;
+    out.classList.remove('empty');
+    banner.innerHTML = '<div class="detect-banner plain"><span class="dot"></span>Detected: already plaintext — no encryption found, shown as-is</div>' + shortWarning;
+    updateRing(0, 'plain');
+  } else {
+    out.textContent = result.decoded;
+    out.classList.remove('empty');
+    banner.innerHTML = '<div class="detect-banner shifted"><span class="dot"></span>Detected ciphertext — shift key −' + result.shift + ' applied</div>' + shortWarning;
+    updateRing(result.shift, 'decrypt');
+  }
+}
+
+function sendToDecrypt(){
+  const cipher = document.getElementById('cipherOut').textContent;
+  if (document.getElementById('cipherOut').classList.contains('empty')) return;
+  document.getElementById('ciphertext').value = cipher;
+  setMode('decrypt');
+  doDecrypt();
+}
+
+function copyText(id, btn){
+  const el = document.getElementById(id);
+  if (!el.textContent || el.classList.contains('empty')) return;
+  const text = el.textContent;
+
+  const showCopied = () => {
+    const original = btn.textContent;
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1200);
+  };
+
+  const fallbackCopy = () => {
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.focus();
+    temp.select();
+    try {
+      document.execCommand('copy');
+      showCopied();
+    } catch (err) {
+      btn.textContent = 'Select & copy manually';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    }
+    document.body.removeChild(temp);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showCopied).catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
+}
+
+document.getElementById('shiftSlider').addEventListener('input', function(){
+  document.getElementById('shiftValue').textContent = this.value;
+  if (currentMode === 'encrypt') updateRing(parseInt(this.value, 10), 'encrypt');
+});
+document.getElementById('manualSlider').addEventListener('input', function(){
+  document.getElementById('manualValue').textContent = this.value;
+  if (document.getElementById('manualToggle').checked) updateRing(parseInt(this.value, 10), 'decrypt');
+});
+
+updateRing(3, 'encrypt');
+doEncrypt();
+</script>
+</body>
+</html>
